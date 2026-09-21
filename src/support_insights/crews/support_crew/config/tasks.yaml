@@ -1,0 +1,107 @@
+fetch_and_analyze_task:
+  description: >
+    The user wants this analysis focused on: "{focus_area}".
+
+    Use your tools to fetch and analyze the customer support ticket data:
+    1. Call `support_ticket_stats` scoped to the focus area (pass it as the
+       `category` argument if it matches one of billing, technical, account,
+       shipping, product_feedback — otherwise call it with no category and
+       use `fetch_support_tickets` with `keyword={focus_area}` to narrow in).
+    2. Call `fetch_support_tickets` with the same scoping to pull a sample of
+       the underlying tickets so you can quote specific examples.
+    3. Also call `support_ticket_stats` with no filter at all, so you can
+       briefly note how this focus area compares to overall support volume.
+
+    Summarize, with real numbers: total ticket volume in scope, volume by
+    priority/channel/customer plan, average resolution time, average first
+    response time, escalation rate, reopen rate, average CSAT, and the top
+    recurring root causes with their counts. Quote 2-3 representative ticket
+    subjects/descriptions as concrete examples.
+  expected_output: >
+    A data-grounded analysis report with clearly labeled metrics (include the
+    exact numbers returned by the tools, and the ticket count each stat is
+    based on), a ranked list of top root causes with counts, and 2-3 quoted
+    example tickets. State explicitly what "{focus_area}" was scoped to.
+  agent: data_analyst
+
+identify_patterns_task:
+  description: >
+    Using the data analyst's findings about "{focus_area}", identify the
+    recurring problems and process bottlenecks. For each one:
+    - Name the pattern/bottleneck clearly (e.g. "refund approval has no SLA,
+      causing multi-day delays").
+    - Cite the supporting metrics (ticket count, % of category volume, avg
+      resolution time, escalation/reopen rate, CSAT impact).
+    - Identify whether it's a product/engineering defect, a process/workflow
+      gap, a policy issue, or a training/communication issue.
+    - Rank all findings from highest to lowest business impact.
+
+    Do not invent problems not supported by the data. If the focus area has
+    fewer than ~15 tickets, explicitly flag that the sample size is small and
+    temper confidence accordingly.
+  expected_output: >
+    A ranked list (highest impact first) of 3-6 recurring problems or
+    bottlenecks in "{focus_area}", each with: a clear name, the supporting
+    metrics/evidence, a root-cause classification, and a one-line note on
+    business impact (e.g. "affects ~24% of billing tickets, driving 2.3x
+    longer resolution time and a 1.2pt CSAT drop").
+  agent: problem_pattern_finder
+  context:
+    - fetch_and_analyze_task
+
+recommend_actions_task:
+  description: >
+    Based on the ranked problems and bottlenecks in "{focus_area}", write
+    concrete, actionable recommendations. For each recommendation:
+    - State the specific action (not "improve X" — say exactly what changes,
+      e.g. "add a 24-hour SLA and auto-escalation rule for refund requests
+      in the billing workflow tool").
+    - Name the likely owning team (support ops, engineering, finance,
+      product, compliance).
+    - Give a rough effort estimate (quick win / medium / major initiative).
+    - State the expected impact in terms of the metrics from the analysis
+      (e.g. "could cut avg resolution time from 48h to under 12h for ~30
+      tickets/month").
+
+    Order recommendations by priority: quick wins with high impact first,
+    then medium-effort fixes, then any major structural investments.
+  expected_output: >
+    A prioritized list of 3-6 recommendations for "{focus_area}", each with
+    action, owning team, effort level, and expected quantified impact.
+  agent: recommendations_strategist
+  context:
+    - fetch_and_analyze_task
+    - identify_patterns_task
+
+compile_coo_report_task:
+  description: >
+    Compile the analysis, identified problems/bottlenecks, and
+    recommendations about "{focus_area}" into a single concise report for
+    the COO. Structure:
+
+    1. **Executive Summary** (3-5 sentences max): the single biggest finding,
+       its cost/impact in numbers, and the top recommended action. This must
+       stand alone — assume the COO reads only this section.
+    2. **Key Metrics** — a short bulleted snapshot of the core numbers for
+       "{focus_area}" (volume, resolution time, escalation rate, CSAT).
+    3. **Top Recurring Problems & Bottlenecks** — the ranked list, tightened
+       to 2-3 sentences each.
+    4. **Recommended Actions** — the prioritized recommendations, tightened
+       to action + owner + expected impact, one line each where possible.
+    5. **What We Need From You** — an explicit, short section naming any
+       approvals, budget, or decisions required from the COO to move
+       forward.
+
+    Keep the whole report under ~600 words. Use markdown headers and
+    bullets. Do not introduce any new analysis or numbers not already
+    established by the other tasks.
+  expected_output: >
+    A polished, board-ready markdown report on "{focus_area}" support
+    tickets with the five sections above, under 600 words, written in plain
+    confident executive language with no jargon or hedging.
+  agent: coo_report_writer
+  context:
+    - fetch_and_analyze_task
+    - identify_patterns_task
+    - recommend_actions_task
+  output_file: output/coo_report.md
