@@ -1,0 +1,12 @@
+USE the following PDF FILEs
+
+# CONTRACT 
+1. https://github.com/bhoga01ai/week3-llamaindex-crewai-agents/blob/main/purchase_terms_conditions.pdf
+
+# INVOICE 
+2. https://github.com/bhoga01ai/week3-llamaindex-crewai-agents/blob/main/sample_invoice.pdf
+
+
+build an agent using CREW AI frame work that can extract and analyze the data from contracts and invoice and create discrepance
+report for various items from invoice. 
+ 
