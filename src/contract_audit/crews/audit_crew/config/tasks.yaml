@@ -1,0 +1,127 @@
+extract_contract_task:
+  description: >
+    Call `read_document_text` with document="contract" to read the purchase
+    terms and conditions in full, then extract its binding commercial terms.
+
+    Capture:
+    - vendor and buyer (note it if the contract only refers to "the Buyer"
+      without naming them)
+    - the invoice number the contract governs, if it names one
+    - every priced deliverable, using the contract's own wording for the
+      description, with its unit price as a plain number and its pricing
+      basis (per unit, per hour, flat fee)
+    - the payment window in days (e.g. "Net 14 days" -> 14)
+    - permitted payment methods, exactly as listed, including any catch-all
+      such as "or other mutually agreed method"
+    - what the contract says about sales tax and who bears it
+    - governing law, and any other clauses that could affect what may be
+      billed: revisions policy, delivery and acceptance windows, termination,
+      IP transfer on payment
+
+    Transcribe prices to the cent. Do not infer quantities — a purchase terms
+    document usually sets rates, not volumes. If the contract is silent on
+    something, leave that field null rather than guessing.
+  expected_output: >
+    A ContractTerms object populated from the contract text, with every priced
+    deliverable listed and the payment window expressed as an integer number
+    of days.
+  agent: contract_analyst
+
+extract_invoice_task:
+  description: >
+    Call `read_document_text` with document="invoice" to read the invoice in
+    full, then extract its data exactly as printed.
+
+    Capture:
+    - invoice number, invoice date, due date (dates as printed)
+    - vendor, and who the invoice is billed to
+    - payment terms as printed (e.g. "Net 14"), payment method, currency
+    - every billed line with its description, quantity, unit price and the
+      line amount as printed
+    - subtotal, tax rate as a percentage number, tax amount, and total due
+
+    Record the document faithfully and do not correct it. If a line's printed
+    amount does not equal quantity x unit price, record the printed amount
+    anyway — detecting that mismatch is a later step's job, and silently
+    fixing it here would hide the error. Be careful to distinguish the unit
+    price column from the amount column, and the subtotal from the total due.
+  expected_output: >
+    An InvoiceData object populated from the invoice, with every billed line
+    and all printed totals captured exactly as they appear on the document.
+  agent: invoice_analyst
+
+audit_discrepancies_task:
+  description: >
+    Compare the invoice against the contract.
+
+    1. Take the ContractTerms from the contract extraction task and the
+       InvoiceData from the invoice extraction task, serialize each to a JSON
+       object string, and call `compare_contract_to_invoice` with them as
+       `contract_json` and `invoice_json`. If the tool reports a validation
+       error, fix the JSON and call it again.
+    2. Work through the discrepancies the tool returns. For each one, explain
+       in business terms what is wrong, which document says what, and what it
+       costs the buyer — quoting the tool's numbers exactly.
+    3. Group the findings by severity and state the overbilled amount, the
+       underbilled amount and the net impact from the tool's summary.
+    4. Call out explicitly whether the invoice total happens to agree with
+       contract pricing despite individual lines being wrong, since a correct
+       bottom line can otherwise mask the problem.
+    5. Note what could not be verified — for example, if the contract sets
+       unit rates but no quantities, the billed quantities cannot be checked
+       against it and need confirmation from whoever received the work.
+
+    Do not perform any arithmetic yourself and do not report a discrepancy the
+    tool did not return. If the tool returns no discrepancies of a given kind,
+    say so rather than inventing one.
+  expected_output: >
+    A structured findings write-up: the summary figures from the tool
+    (discrepancy count by severity, overbilled, underbilled, net impact),
+    then every discrepancy grouped high to low severity with the contract
+    value, the invoice value, the difference and the business explanation for
+    each, followed by a short list of items that could not be verified.
+  agent: discrepancy_auditor
+  context:
+    - extract_contract_task
+    - extract_invoice_task
+
+write_discrepancy_report_task:
+  description: >
+    Write the final discrepancy report as markdown. Structure it exactly as:
+
+    1. **Header** — invoice number, vendor, buyer, invoice date, total billed,
+       and the audit date, which is {audit_date}. Use that date exactly; do
+       not guess today's date.
+    2. **Bottom Line** — two or three sentences: how many discrepancies were
+       found, the total amount in dispute, the net impact to the buyer, and
+       whether the invoice should be paid as-is, paid short, or held.
+    3. **Line-Item Comparison** — a markdown table with one row per invoice
+       line: Item | Qty | Contract Unit Price | Invoiced Unit Price |
+       Difference | Line Impact | Status. Use a clear status such as OK,
+       OVERCHARGE, UNDERCHARGE or NOT IN CONTRACT.
+    4. **Discrepancies Found** — each finding as its own short subsection with
+       a severity label, what the contract says, what the invoice says, the
+       amount involved, and the recommended action.
+    5. **Terms & Compliance Checks** — payment terms, due date, payment
+       method, document linkage, and the invoice's internal arithmetic
+       (line totals, subtotal, tax, grand total) each marked as verified or
+       flagged.
+    6. **Recommended Actions** — a short numbered list of what the buyer
+       should do before paying, most important first, with the specific
+       amount or question for the vendor.
+    7. **Not Verified** — anything the audit could not confirm from the two
+       documents alone.
+
+    Use only figures the auditor verified through the comparison tool. Keep it
+    under about 800 words. Write plainly — this goes to a finance manager who
+    will forward parts of it to the vendor.
+  expected_output: >
+    A complete markdown discrepancy report with the seven sections above,
+    including the line-item comparison table, every amount stated to the cent,
+    and concrete recommended actions.
+  agent: audit_report_writer
+  context:
+    - extract_contract_task
+    - extract_invoice_task
+    - audit_discrepancies_task
+  output_file: output/discrepancy_report.md
